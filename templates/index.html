@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>브랜드톡 이미지 검색</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #141414; color: #f0f0f0; font-family: -apple-system, sans-serif; }
@@ -25,6 +27,12 @@ input[type=text] {
 }
 input[type=text]::placeholder { color: #666; }
 
+select {
+  background: #2a2a2a; color: #f0f0f0;
+  border: none; border-radius: 8px; padding: 9px 10px;
+  font-size: 13px; outline: none; flex: 1;
+}
+
 button {
   background: #e85d8a; color: white; border: none;
   border-radius: 8px; padding: 10px 16px;
@@ -35,12 +43,14 @@ button.sec { background: #2a2a2a; color: #ccc; }
 button.sec:active { background: #3a3a3a; }
 button:active { opacity: 0.8; }
 
-.meta-row { display: flex; gap: 8px; align-items: center; }
-.meta-row select, .meta-row input {
-  flex: 1; background: #2a2a2a; color: #f0f0f0;
-  border: none; border-radius: 8px; padding: 9px 10px;
-  font-size: 13px; outline: none;
+.engine-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.engine-tabs button {
+  flex: 1; padding: 8px; font-size: 13px; font-weight: 600;
+  border-radius: 8px; background: #2a2a2a; color: #888;
 }
+.engine-tabs button.active { background: #e85d8a; color: white; }
+
+.meta-row { display: flex; gap: 8px; align-items: center; }
 
 #status {
   padding: 6px 16px; font-size: 12px; color: #888;
@@ -65,24 +75,55 @@ button:active { opacity: 0.8; }
   width: 100%; height: 100%;
   object-fit: cover;
   display: block;
-  transition: opacity 0.15s;
 }
-.thumb-wrap .overlay {
+.thumb-wrap.saved::after {
+  content: "✓";
   position: absolute; inset: 0;
-  background: rgba(232,93,138,0.65);
-  display: none;
-  align-items: center; justify-content: center;
-  font-size: 32px;
+  background: rgba(76,175,80,0.55);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: white;
+  display: flex;
 }
-.thumb-wrap.selected .overlay { display: flex; }
-.thumb-wrap.selected img { opacity: 0.5; }
 
 .pager {
   display: flex; justify-content: space-between;
   padding: 12px 16px;
 }
 
-/* 대기열 패널 */
+/* 이미지 미리보기 모달 */
+#preview-modal {
+  display: none;
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(0,0,0,0.9);
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 16px;
+  gap: 16px;
+}
+#preview-modal.open { display: flex; }
+#preview-img {
+  max-width: 100%; max-height: 60vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+#preview-title {
+  font-size: 12px; color: #aaa;
+  text-align: center;
+  max-width: 90%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.preview-meta {
+  width: 100%; display: flex; flex-direction: column; gap: 8px;
+}
+.preview-meta select, .preview-meta input {
+  width: 100%; background: #2a2a2a; color: #f0f0f0;
+  border: none; border-radius: 8px; padding: 10px 12px;
+  font-size: 14px; outline: none;
+}
+.preview-btns { display: flex; gap: 10px; width: 100%; }
+.preview-btns button { flex: 1; padding: 12px; font-size: 15px; }
+#save-btn { background: #4caf50; }
+
 #queue-bar {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: #1a1a1a;
@@ -101,7 +142,6 @@ button:active { opacity: 0.8; }
 
 .spacer { height: 70px; }
 
-/* 대기열 목록 패널 */
 #queue-panel {
   display: none;
   position: fixed; inset: 0;
@@ -124,7 +164,6 @@ button:active { opacity: 0.8; }
 .queue-item .info b { display: block; color: #f0f0f0; font-size: 13px; margin-bottom: 2px; }
 .queue-item .del { background: #c0392b; font-size: 12px; padding: 6px 10px; }
 
-/* sync 명령어 박스 */
 #sync-cmd {
   margin: 12px 16px;
   background: #1e1e1e;
@@ -141,28 +180,40 @@ button:active { opacity: 0.8; }
 
 <header>
   <h1>브랜드톡 이미지 검색</h1>
-  <div class="row">
-    <input type="text" id="query" placeholder="검색어 입력 (예: Forever 21 파산)" onkeydown="if(event.key==='Enter')search()">
-    <button onclick="search()">검색</button>
+  <div class="engine-tabs">
+    <button id="tab-naver" class="active" onclick="setEngine('naver')">네이버</button>
+    <button id="tab-google" onclick="setEngine('google')">구글</button>
   </div>
-  <div class="meta-row">
-    <input type="text" id="episode" placeholder="에피소드 (예: 003_forever21)" value="">
-    <input type="text" id="filename" placeholder="저장명 (예: scene3_매출.jpg)">
+  <div class="row">
+    <input type="text" id="query" placeholder="검색어 입력" onkeydown="if(event.key==='Enter')search()">
+    <button onclick="search()">검색</button>
   </div>
 </header>
 
 <div id="status">검색어를 입력하세요</div>
-
 <div class="grid" id="grid"></div>
-
 <div class="pager">
   <button class="sec" onclick="prevPage()">◀ 이전</button>
   <button class="sec" onclick="nextPage()">다음 ▶</button>
 </div>
-
 <div class="spacer"></div>
 
-<!-- 하단 대기열 바 -->
+<!-- 이미지 미리보기 모달 -->
+<div id="preview-modal">
+  <img id="preview-img" src="" alt="">
+  <div id="preview-title"></div>
+  <div class="preview-meta">
+    <select id="modal-episode">
+      <option value="">에피소드 선택</option>
+    </select>
+    <input type="text" id="modal-filename" placeholder="저장명 (예: scene3_매출.jpg)">
+  </div>
+  <div class="preview-btns">
+    <button class="sec" onclick="closePreview()">닫기</button>
+    <button id="save-btn" onclick="saveFromModal()">저장</button>
+  </div>
+</div>
+
 <div id="queue-bar">
   <span id="queue-count">0</span>
   <span id="queue-label">대기 중인 이미지</span>
@@ -170,7 +221,6 @@ button:active { opacity: 0.8; }
   <button id="sync-btn" onclick="showSyncInfo()">Mac 동기화 ↓</button>
 </div>
 
-<!-- 대기열 패널 -->
 <div id="queue-panel">
   <header>
     <button onclick="hideQueue()">✕</button>
@@ -186,6 +236,27 @@ let currentItems = [];
 let pageStart = 1;
 let currentQuery = "";
 let queueData = [];
+let currentEngine = "naver";
+let previewIdx = null;
+
+async function loadEpisodes() {
+  const res = await fetch("/episodes");
+  const eps = await res.json();
+  [document.getElementById("modal-episode")].forEach(sel => {
+    eps.forEach(ep => {
+      const opt = document.createElement("option");
+      opt.value = ep.id;
+      opt.textContent = ep.label;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function setEngine(engine) {
+  currentEngine = engine;
+  document.getElementById("tab-naver").classList.toggle("active", engine === "naver");
+  document.getElementById("tab-google").classList.toggle("active", engine === "google");
+}
 
 async function search(resetPage = true) {
   const q = document.getElementById("query").value.trim();
@@ -195,12 +266,12 @@ async function search(resetPage = true) {
   setStatus("검색 중...");
   clearGrid();
 
-  const res = await fetch(`/search?q=${encodeURIComponent(q)}&start=${pageStart}`);
-  const items = await res.json();
-  if (!Array.isArray(items)) { setStatus("검색 실패"); return; }
-  currentItems = items;
-  renderGrid(items);
-  setStatus(`${items.length}개 결과 — 이미지 탭하면 대기열에 추가`);
+  const res = await fetch(`/search?q=${encodeURIComponent(q)}&start=${pageStart}&engine=${currentEngine}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) { setStatus(data.error || "검색 실패"); return; }
+  currentItems = data;
+  renderGrid(data);
+  setStatus(`${data.length}개 결과 (${currentEngine === "naver" ? "네이버" : "구글"}) — 이미지 탭해서 미리보기`);
 }
 
 function prevPage() {
@@ -215,8 +286,7 @@ function nextPage() {
 }
 
 function clearGrid() {
-  const grid = document.getElementById("grid");
-  grid.innerHTML = "";
+  document.getElementById("grid").innerHTML = "";
   currentItems = [];
 }
 
@@ -226,45 +296,63 @@ function renderGrid(items) {
   items.forEach((item, i) => {
     const wrap = document.createElement("div");
     wrap.className = "thumb-wrap";
-    wrap.innerHTML = `
-      <img src="${item.thumbnail || item.link}" loading="lazy" onerror="this.src='/static/err.png'">
-      <div class="overlay">✓</div>
-    `;
-    wrap.onclick = () => addToQueue(i, wrap);
+    wrap.dataset.idx = i;
+    wrap.innerHTML = `<img src="${item.thumbnail || item.link}" loading="lazy" onerror="this.src=''">`;
+    wrap.onclick = () => openPreview(i, wrap);
     grid.appendChild(wrap);
   });
 }
 
-async function addToQueue(idx, el) {
+function openPreview(idx, el) {
+  previewIdx = idx;
   const item = currentItems[idx];
-  const episode = document.getElementById("episode").value.trim();
-  const filename = document.getElementById("filename").value.trim() || suggestFilename(item);
+  document.getElementById("preview-img").src = item.link || item.thumbnail;
+  document.getElementById("preview-title").textContent = (item.title || "").replace(/<[^>]+>/g, "");
+  document.getElementById("modal-filename").value = "";
+  document.getElementById("preview-modal").classList.add("open");
+}
 
-  if (!episode) { alert("에피소드명을 입력하세요 (예: 003_forever21)"); return; }
-  if (!filename) { alert("저장명을 입력하세요"); return; }
+function closePreview() {
+  document.getElementById("preview-modal").classList.remove("open");
+  previewIdx = null;
+}
 
-  el.classList.toggle("selected");
-  const isSelected = el.classList.contains("selected");
+async function saveFromModal() {
+  if (previewIdx === null) return;
+  const item = currentItems[previewIdx];
+  const episodeId = document.getElementById("modal-episode").value;
+  const filename = document.getElementById("modal-filename").value.trim() || suggestFilename(item);
 
-  if (isSelected) {
-    await fetch("/queue", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        url: item.link || item.thumbnail,
-        thumbnail: item.thumbnail,
-        episode,
-        filename: filename.endsWith(".jpg") || filename.endsWith(".png") ? filename : filename + ".jpg",
-        title: (item.title || "").replace(/<[^>]+>/g, ""),
-      })
-    });
-  } else {
-    await fetch("/queue/remove", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ filename })
-    });
-  }
+  if (!episodeId) { alert("에피소드를 선택하세요"); return; }
+  const finalFilename = filename.endsWith(".jpg") || filename.endsWith(".png") ? filename : filename + ".jpg";
+
+  const btn = document.getElementById("save-btn");
+  btn.textContent = "저장 중...";
+  btn.disabled = true;
+
+  await fetch("/queue", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      url: item.link || item.thumbnail,
+      thumbnail: item.thumbnail,
+      episode: episodeId,
+      filename: finalFilename,
+      title: (item.title || "").replace(/<[^>]+>/g, ""),
+    })
+  });
+
+  // 썸네일에 저장 표시
+  const wrap = document.querySelector(`.thumb-wrap[data-idx="${previewIdx}"]`);
+  if (wrap) wrap.classList.add("saved");
+
+  btn.textContent = "저장됨 ✓";
+  setTimeout(() => {
+    btn.textContent = "저장";
+    btn.disabled = false;
+    closePreview();
+  }, 800);
+
   await refreshQueueCount();
 }
 
@@ -332,7 +420,12 @@ function setStatus(msg) {
   document.getElementById("status").textContent = msg;
 }
 
-// 초기 대기열 수 로드
+// 모달 바깥 탭하면 닫기
+document.getElementById("preview-modal").addEventListener("click", function(e) {
+  if (e.target === this) closePreview();
+});
+
+loadEpisodes();
 refreshQueueCount();
 </script>
 </body>
