@@ -6,8 +6,8 @@ app = Flask(__name__)
 
 NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "l7n8F9keGoEPOZn94frN")
 NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "fVHlSmF3N2")
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-GOOGLE_CX = os.environ.get("GOOGLE_CX", "")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyDVMtSkv9UJkc_BTvStDUO_MtsRI-_pQjY")
+GOOGLE_CX = os.environ.get("GOOGLE_CX", "178f654abe6aa4ecb")
 QUEUE_FILE = Path("queue.json")
 EPISODES_FILE = Path("episodes.json")
 
