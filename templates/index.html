@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>브랜드톡 이미지 검색</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #141414; color: #f0f0f0; font-family: -apple-system, sans-serif; }
+
+header {
+  background: #1e1e1e;
+  padding: 14px 16px 10px;
+  position: sticky; top: 0; z-index: 10;
+  border-bottom: 1px solid #333;
+}
+header h1 { font-size: 15px; color: #e85d8a; margin-bottom: 10px; }
+
+.row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+input[type=text] {
+  flex: 1; background: #2a2a2a; color: #f0f0f0;
+  border: none; border-radius: 8px; padding: 10px 12px;
+  font-size: 15px; outline: none;
+}
+input[type=text]::placeholder { color: #666; }
+
+button {
+  background: #e85d8a; color: white; border: none;
+  border-radius: 8px; padding: 10px 16px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+}
+button.sec { background: #2a2a2a; color: #ccc; }
+button.sec:active { background: #3a3a3a; }
+button:active { opacity: 0.8; }
+
+.meta-row { display: flex; gap: 8px; align-items: center; }
+.meta-row select, .meta-row input {
+  flex: 1; background: #2a2a2a; color: #f0f0f0;
+  border: none; border-radius: 8px; padding: 9px 10px;
+  font-size: 13px; outline: none;
+}
+
+#status {
+  padding: 6px 16px; font-size: 12px; color: #888;
+  min-height: 24px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  padding: 0 3px;
+}
+
+.thumb-wrap {
+  position: relative;
+  aspect-ratio: 1;
+  background: #222;
+  overflow: hidden;
+  cursor: pointer;
+}
+.thumb-wrap img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 0.15s;
+}
+.thumb-wrap .overlay {
+  position: absolute; inset: 0;
+  background: rgba(232,93,138,0.65);
+  display: none;
+  align-items: center; justify-content: center;
+  font-size: 32px;
+}
+.thumb-wrap.selected .overlay { display: flex; }
+.thumb-wrap.selected img { opacity: 0.5; }
+
+.pager {
+  display: flex; justify-content: space-between;
+  padding: 12px 16px;
+}
+
+/* 대기열 패널 */
+#queue-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #1a1a1a;
+  border-top: 1px solid #333;
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 20;
+}
+#queue-count {
+  background: #e85d8a; color: white;
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 13px; font-weight: 700;
+}
+#queue-label { color: #aaa; font-size: 13px; flex: 1; }
+#sync-btn { background: #4caf50; font-size: 13px; padding: 8px 14px; }
+
+.spacer { height: 70px; }
+
+/* 대기열 목록 패널 */
+#queue-panel {
+  display: none;
+  position: fixed; inset: 0;
+  background: #141414;
+  z-index: 30;
+  overflow-y: auto;
+  padding-bottom: 80px;
+}
+#queue-panel header {
+  display: flex; align-items: center; gap: 12px;
+}
+#queue-panel header button { background: #333; }
+.queue-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #222;
+}
+.queue-item img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; }
+.queue-item .info { flex: 1; font-size: 12px; color: #aaa; }
+.queue-item .info b { display: block; color: #f0f0f0; font-size: 13px; margin-bottom: 2px; }
+.queue-item .del { background: #c0392b; font-size: 12px; padding: 6px 10px; }
+
+/* sync 명령어 박스 */
+#sync-cmd {
+  margin: 12px 16px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #4caf50;
+  word-break: break-all;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>브랜드톡 이미지 검색</h1>
+  <div class="row">
+    <input type="text" id="query" placeholder="검색어 입력 (예: Forever 21 파산)" onkeydown="if(event.key==='Enter')search()">
+    <button onclick="search()">검색</button>
+  </div>
+  <div class="meta-row">
+    <input type="text" id="episode" placeholder="에피소드 (예: 003_forever21)" value="">
+    <input type="text" id="filename" placeholder="저장명 (예: scene3_매출.jpg)">
+  </div>
+</header>
+
+<div id="status">검색어를 입력하세요</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="pager">
+  <button class="sec" onclick="prevPage()">◀ 이전</button>
+  <button class="sec" onclick="nextPage()">다음 ▶</button>
+</div>
+
+<div class="spacer"></div>
+
+<!-- 하단 대기열 바 -->
+<div id="queue-bar">
+  <span id="queue-count">0</span>
+  <span id="queue-label">대기 중인 이미지</span>
+  <button onclick="showQueue()">목록</button>
+  <button id="sync-btn" onclick="showSyncInfo()">Mac 동기화 ↓</button>
+</div>
+
+<!-- 대기열 패널 -->
+<div id="queue-panel">
+  <header>
+    <button onclick="hideQueue()">✕</button>
+    <h1>대기열</h1>
+    <button onclick="clearAll()" style="background:#c0392b;margin-left:auto">전체 삭제</button>
+  </header>
+  <div id="sync-cmd" style="display:none"></div>
+  <div id="queue-list"></div>
+</div>
+
+<script>
+let currentItems = [];
+let pageStart = 1;
+let currentQuery = "";
+let queueData = [];
+
+async function search(resetPage = true) {
+  const q = document.getElementById("query").value.trim();
+  if (!q) return;
+  if (resetPage) pageStart = 1;
+  currentQuery = q;
+  setStatus("검색 중...");
+  clearGrid();
+
+  const res = await fetch(`/search?q=${encodeURIComponent(q)}&start=${pageStart}`);
+  const items = await res.json();
+  if (!Array.isArray(items)) { setStatus("검색 실패"); return; }
+  currentItems = items;
+  renderGrid(items);
+  setStatus(`${items.length}개 결과 — 이미지 탭하면 대기열에 추가`);
+}
+
+function prevPage() {
+  if (pageStart <= 1 || !currentQuery) return;
+  pageStart = Math.max(1, pageStart - 9);
+  search(false);
+}
+function nextPage() {
+  if (!currentQuery) return;
+  pageStart += 9;
+  search(false);
+}
+
+function clearGrid() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  currentItems = [];
+}
+
+function renderGrid(items) {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  items.forEach((item, i) => {
+    const wrap = document.createElement("div");
+    wrap.className = "thumb-wrap";
+    wrap.innerHTML = `
+      <img src="${item.thumbnail || item.link}" loading="lazy" onerror="this.src='/static/err.png'">
+      <div class="overlay">✓</div>
+    `;
+    wrap.onclick = () => addToQueue(i, wrap);
+    grid.appendChild(wrap);
+  });
+}
+
+async function addToQueue(idx, el) {
+  const item = currentItems[idx];
+  const episode = document.getElementById("episode").value.trim();
+  const filename = document.getElementById("filename").value.trim() || suggestFilename(item);
+
+  if (!episode) { alert("에피소드명을 입력하세요 (예: 003_forever21)"); return; }
+  if (!filename) { alert("저장명을 입력하세요"); return; }
+
+  el.classList.toggle("selected");
+  const isSelected = el.classList.contains("selected");
+
+  if (isSelected) {
+    await fetch("/queue", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        url: item.link || item.thumbnail,
+        thumbnail: item.thumbnail,
+        episode,
+        filename: filename.endsWith(".jpg") || filename.endsWith(".png") ? filename : filename + ".jpg",
+        title: (item.title || "").replace(/<[^>]+>/g, ""),
+      })
+    });
+  } else {
+    await fetch("/queue/remove", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ filename })
+    });
+  }
+  await refreshQueueCount();
+}
+
+function suggestFilename(item) {
+  const title = (item.title || "image").replace(/<[^>]+>/g, "").replace(/[^\w가-힣]/g, "_").slice(0, 20);
+  return title + ".jpg";
+}
+
+async function refreshQueueCount() {
+  const res = await fetch("/queue");
+  queueData = await res.json();
+  document.getElementById("queue-count").textContent = queueData.length;
+}
+
+async function showQueue() {
+  await refreshQueueCount();
+  const list = document.getElementById("queue-list");
+  list.innerHTML = "";
+  queueData.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "queue-item";
+    div.innerHTML = `
+      <img src="${item.thumbnail || ''}" onerror="this.style.display='none'">
+      <div class="info">
+        <b>${item.filename}</b>
+        ${item.episode} / ${item.title || ""}
+      </div>
+      <button class="del" onclick="removeItem('${item.filename}', this.parentElement)">삭제</button>
+    `;
+    list.appendChild(div);
+  });
+  document.getElementById("queue-panel").style.display = "block";
+}
+
+async function removeItem(filename, el) {
+  await fetch("/queue/remove", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ filename })
+  });
+  el.remove();
+  await refreshQueueCount();
+}
+
+function hideQueue() {
+  document.getElementById("queue-panel").style.display = "none";
+  document.getElementById("sync-cmd").style.display = "none";
+}
+
+async function clearAll() {
+  if (!confirm("전체 삭제?")) return;
+  await fetch("/queue/clear", { method: "POST" });
+  await refreshQueueCount();
+  document.getElementById("queue-list").innerHTML = "";
+}
+
+function showSyncInfo() {
+  const box = document.getElementById("sync-cmd");
+  box.style.display = "block";
+  box.textContent = `# Mac 터미널에서 실행:\ncd ~/Library/Mobile\\ Documents/com~apple~CloudDocs/❗️Life\\ OS/05.\\ Branding/SNS/유튜브/브랜드톡/episodes\npython3 sync.py`;
+  showQueue();
+}
+
+function setStatus(msg) {
+  document.getElementById("status").textContent = msg;
+}
+
+// 초기 대기열 수 로드
+refreshQueueCount();
+</script>
+</body>
+</html>
